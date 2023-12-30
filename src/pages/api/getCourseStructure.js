@@ -1,5 +1,6 @@
 // Next.js API route support: https://nextjs.org/docs/api-routes/introduction
 
+// This function now only interacts with OpenAI to generate the course structure.
 export default async function getCourseStructure(req, res) {
     if (req.method !== 'POST') {
         res.setHeader('Allow', 'POST');
@@ -7,15 +8,7 @@ export default async function getCourseStructure(req, res) {
         return;
     }
 
-    const { OPENAI_API_KEY, YOUTUBE_API_KEY } = process.env;
-    const MAX_WORDS_PER_STEP = 10;
-    const MAX_RESULTS_PER_STEP = 3;
-
-    function removeDuplicateWords(str) {
-        let words = str.split(" ");
-        let uniqueWords = [...new Set(words)];
-        return uniqueWords.join(" ");
-    }
+    const { OPENAI_API_KEY } = process.env;
 
     if (!req.body || !req.body.query || !req.body.query.instruction) {
         res.status(400).json({ error: "Invalid input" });
@@ -25,7 +18,6 @@ export default async function getCourseStructure(req, res) {
     const query = req.body.query;
 
     try {
-        // Log the request body
         console.log("Request body:", req.body);
 
         // Extract the topic from the instruction
@@ -60,28 +52,12 @@ export default async function getCourseStructure(req, res) {
 
         // Extract the course outline from the OpenAI response
         const courseOutline = chatGPTData.choices[0].message.content.trim().split('\n')
-            .filter(step => step.split(' ').length <= MAX_WORDS_PER_STEP);
+            .map(step => step.trim()) // Trim each step
+            .filter(step => step); // Filter out any empty strings
 
-        // Fetch YouTube videos
-        const videos = [];
-        const errors = [];
-        const selectedVideoIds = [];
-
-        for (const step of courseOutline) {
-            // Construct the YouTube search query
-            const searchQuery = `${step} ${topic}`;
-            const cleanedSearchQuery = removeDuplicateWords(searchQuery);
-
-            // Call YouTube API
-            const youtubeResponse = await fetch(`https://www.googleapis.com/youtube/v3/search?part=snippet&q=${encodeURIComponent(cleanedSearchQuery)}&maxResults=${MAX_RESULTS_PER_STEP}&type=video&key=${YOUTUBE_API_KEY}`);
-            const youtubeData = await youtubeResponse.json();
-
-        }
-
-        // Send the response with videos and any errors
-        res.status(200).json({ videos: videos, errors: errors });
+        // Send the course outline back to the client
+        res.status(200).json({ courseOutline });
     } catch (error) {
-        // Handle errors
         console.error("Error:", error);
         res.status(500).json({ error: 'An error occurred while processing your request.' });
     }

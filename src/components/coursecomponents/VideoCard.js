@@ -6,7 +6,7 @@ const videoCardStyle = css`
   display: flex;
   flex-direction: column;
   align-items: center;
-  background-color: var(--color-background); // Using global color variable
+  background-color: var(--color-background-dark); // Using global color variable
   color: var(--text-color-primary-dark); // Using global color variable
   margin-bottom: 16px; // Spacing between cards, adjust as needed
 `;
