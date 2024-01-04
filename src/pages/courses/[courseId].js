@@ -17,59 +17,98 @@ const contentStyle = css`
   padding: 20px;
 `;
 
-const safeJsonParse = (str) => {
-    try {
-      return JSON.parse(str);
-    } catch (e) {
-      console.error('Failed to parse JSON:', e);
-      return null; // or a sensible default value like {}
-    }
-  };
-
 const CoursePage = () => {
-  const [courseOutline, setCourseOutline] = useState([]);
-  const [videos, setVideos] = useState([]);
-  const [currentVideoIndex, setCurrentVideoIndex] = useState(0);
-  const router = useRouter();
+    const [courseOutline, setCourseOutline] = useState([]);
+    const [videos, setVideos] = useState([]);
+    const [currentVideoIndex, setCurrentVideoIndex] = useState(0);
+    const [isLoading, setIsLoading] = useState(false);
+    const [error, setError] = useState(null);
+    const router = useRouter();
+    const { courseId } = router.query;
+  
+    useEffect(() => {
+      if (!router.isReady || !courseId) return;
+  
+      const fetchCourseData = async () => {
+        setIsLoading(true);
+        try {
+          // Generate query with examples and level
+          const chatGPTQuery = {
+            instruction: `List only 6 headings for a beginner course in ${courseId}, without any additional details or explanations.`,
+            examples: [
+              {
+                instruction: "List only 6 headings for a beginner course in wildlife photography, without any additional details or explanations.",
+                response: [
+                  "Introduction to Wildlife Photography",
+                  "Essential Camera Gear and Settings",
+                  "Field Techniques and Composition",
+                  "Understanding Wildlife Behavior",
+                  "Post-Processing and Editing",
+                  "Ethics and Conservation in Wildlife Photography"
+                ]
+              }
+            ],
+            level: "beginner"
+          };
 
-  useEffect(() => {
-    if (router.isReady) {
-      const { courseOutline, videos } = router.query;
-      if (courseOutline && videos) {
-        const parsedCourseOutline = safeJsonParse(courseOutline);
-        const parsedVideos = safeJsonParse(videos);
+          // Fetch Course Structure
+          const courseResponse = await fetch('/api/getCourseStructure', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ query: chatGPTQuery })
+          });
 
-        // Only update the state if parsing was successful
-        if (parsedCourseOutline && parsedVideos) {
-          setCourseOutline(parsedCourseOutline);
-          setVideos(parsedVideos);
-          setCurrentVideoIndex(0); // Assuming the first video is the default
+          if (!courseResponse.ok) throw new Error('Failed to fetch course structure');
+          const courseOutlineData = await courseResponse.json();
+
+          // Fetch Videos
+          let fetchedVideos = [];
+          for (const step of courseOutlineData.courseOutline) {
+            const videoResponse = await fetch(`/api/searchYouTube?q=${encodeURIComponent(step)}`);
+            if (!videoResponse.ok) continue;
+            const videoData = await videoResponse.json();
+            fetchedVideos.push({ title: step, videos: videoData.items });
+          }
+
+          setCourseOutline(courseOutlineData.courseOutline);
+          setVideos(fetchedVideos);
+        } catch (error) {
+          console.error("Error fetching course data:", error);
+          setError('Failed to load course data.');
+        } finally {
+          setIsLoading(false);
         }
-      }
-    }
-  }, [router.isReady]);
- // Dependency on router.isReady to ensure the query params are available
+      };
+  
+      fetchCourseData();
+    }, [router.isReady, courseId]);
 
-  const handleStepChange = (index) => {
-    // Update the current video based on the selected step
-    setCurrentVideoIndex(index);
-  };
+    const handleStepChange = (index) => {
+      setCurrentVideoIndex(index);
+    };
 
-  // Get the current video object based on the currentVideoIndex
-  const currentVideo = videos.length > 0 ? videos[currentVideoIndex]?.videos[0] : null;
+    const currentVideo = videos.length > 0 ? videos[currentVideoIndex]?.videos[0] : null;
 
-  return (
-    <div css={pageStyle}>
-      <Header />
-      <div css={contentStyle}>
-        {currentVideo && <VideoCard video={currentVideo} />}
-        <Accordion
-          steps={courseOutline}
-          onStepChange={handleStepChange}
-        />
+    return (
+      <div css={pageStyle}>
+        <Header />
+        {isLoading ? (
+          <p>Loading...</p>
+        ) : error ? (
+          <p>{error}</p>
+        ) : (
+          <div css={contentStyle}>
+            {currentVideo && <VideoCard video={currentVideo} />}
+            <Accordion
+              steps={courseOutline}
+              onStepChange={handleStepChange}
+            />
+          </div>
+        )}
       </div>
-    </div>
-  );
+    );
 };
 
 export default CoursePage;
+
+
